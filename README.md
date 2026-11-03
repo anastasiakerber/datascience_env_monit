@@ -18,4 +18,4 @@ jobs/     Slurm job scripts
 docs/     notes and templates
 
 ## Author
-Anastasia Kerber
+Anastasia Kerber, 03.11.2026
