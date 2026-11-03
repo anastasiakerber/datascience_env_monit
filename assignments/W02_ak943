@@ -1,0 +1,43 @@
+# My GitHub fork: 
+https://github.com/anastasiakerber/datascience_env_monit.git
+
+
+# hello_R_8266980.out
+
+Host: uc3n069.localdomain 
+Job ID: 8266980 
+Resamples: 5000 
+Mean daily GPP: 3.98 (95% CI 3.83 to 4.14)
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc3n069
+Job ID: 8266980
+Cluster: uc3
+User/Group: fr_ak943/fr_fr
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 2
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 00:00:34 core-walltime
+Job Wall-clock time: 00:00:17
+Memory Utilized: 34.84 MB
+Memory Efficiency: 0.87% of 3.91 GB (1.95 GB/core)
+
+# docs/STORAGE.md
+
+# Storage and backup
+
+## Where things live
+- Code: GitHub (anastasiakerber/datascience_env_monit),
+  my laptop, cluster HOME
+- Results: cluster workspace `envmon`, path: /pfs/work9/workspace/scratch/fr_ak943-envmon
+
+## Expiry
+- Workspace `envmon` expires on: Sat Jan  2 19:20:20 2027
+- I extend it on: Wed Dec  30 19:20:20 2026. Calendar reminder set: yes
+
+## Backup
+- Code: GitHub is the second copy
+- Results I must keep: copied to my laptop on Tue Nov 03 19:44:00 2026
+- Raw data: original download source + bwunicluster
