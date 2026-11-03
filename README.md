@@ -1,6 +1,7 @@
 # Cluster hello
 
 Bootstraps a synthetic GPP series and prints a 95% interval.
+This is a part of the module Environmental Monitoring.
 --------------------------------------------------------------
 
 ## Run
