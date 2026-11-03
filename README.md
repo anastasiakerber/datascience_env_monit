@@ -1,6 +1,7 @@
 # Cluster hello
 
 Bootstraps a synthetic GPP series and prints a 95% interval.
+--------------------------------------------------------------
 
 ## Run
 Rscript scripts/cluster_hello.R 200
