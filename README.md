@@ -11,4 +11,4 @@ jobs/     Slurm job scripts
 docs/     notes and templates
 
 ## Author
-Anastias Kerber
+Anastasia Kerber
