@@ -2,4 +2,6 @@
 *.tmp
 *.out
 *.zip
-.envdata/
+*.csv
+*.envdata/
+*.tif
