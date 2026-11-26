@@ -1,0 +1,352 @@
+---
+title: "Data summary of my five flux towers"
+author: "Anastasia Kerber"
+date: 2026-11-18
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  warning: false
+---
+
+my GitHub: https://github.com/anastasiakerber/datascience_env_monit 
+
+#| label: setup
+
+```{r}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(tidyr)
+library(maps)
+
+# Funktion definieren
+read_hh <- function(zip_file) {
+
+  keep <- c(
+    "TIMESTAMP_START", "TIMESTAMP_END", "TA_F", "SW_IN_F", "VPD_F", "P_F", "USTAR", 
+    "NETRAD", "G_F_MDS", "H_F_MDS", "H_F_MDS_QC", "LE_F_MDS", "LE_F_MDS_QC",
+    "NEE_VUT_REF", "NEE_VUT_REF_QC", "GPP_NT_VUT_REF", "RECO_NT_VUT_REF"
+  )
+
+  site <- strsplit(basename(zip_file), "_")[[1]][2]
+
+  hh_name <- grep(
+    "FLUXMET_HH",
+    unzip(zip_file, list = TRUE)$Name,
+    value = TRUE)
+
+  unzip(
+    zip_file,
+    files = hh_name,
+    exdir = "data/raw/unzipped",
+    overwrite = TRUE)
+
+  hh <- read_csv(
+    file.path("data/raw/unzipped", hh_name),
+    na = "-9999",
+    col_select = any_of(keep),
+    col_types = cols(
+      TIMESTAMP_START = "c",
+      TIMESTAMP_END = "c",
+      .default = "d"))
+
+  # Add missing columns
+  missing_cols <- setdiff(keep, names(hh))
+
+  for (col in missing_cols) {
+    hh[[col]] <- NA}
+
+  # Put columns back in the desired order
+  hh <- hh[, keep]
+
+  hh <- hh |>
+  rename(
+    NEE  = NEE_VUT_REF,
+    GPP  = GPP_NT_VUT_REF,
+    RECO = RECO_NT_VUT_REF)
+
+  hh <- hh |>
+  mutate(
+    site = site,
+    time = as.POSIXct(
+      TIMESTAMP_START,
+      format = "%Y%m%d%H%M",
+      tz = "UTC"
+    )
+  )
+  return(hh)}
+
+# alle Tower-Dateien finden
+zip_files <- list.files("data/raw", pattern = "\\.zip$", full.names = TRUE)
+
+countries <- c(US = "USA", CN = "China", FI = "Finnland", CD = "Kongo", AU = "Australien")
+
+# alle Tower einlesen
+all_hh <- do.call(rbind,lapply(zip_files, read_hh))
+
+# Snapshot mit den Metadaten laden
+snapshot <- read_csv("data/fluxnet_shuttle_snapshot_20261117T172817.csv",show_col_types = FALSE)
+
+my_sites <- sort(unique(all_hh$site))
+
+sites <- snapshot |>
+  filter(site_id %in% my_sites) |>
+  distinct(site_id, .keep_all = TRUE) |>
+  mutate(country = countries[substr(site_id, 1, 2)])
+
+sites |>
+  select(`Site ID` = site_id, Name = site_name, Country = country, IGBP = igbp,
+         `Lat (°)` = location_lat, `Lon (°)` = location_long,
+         `First year` = first_year, `Last year` = last_year,
+         Hub = data_hub, Citation = product_citation) |>
+  knitr::kable(digits = 2)
+```
+
+# Data Summary Report
+## Site Overview
+
+```{r}
+#libraries
+library (ggplot2)
+library(tidyverse)
+library(knitr)
+library(here)
+
+# map 
+world <- map_data("world")
+
+ggplot() +
+  geom_polygon(data = world, aes(long, lat, group = group),
+               fill = "grey90", colour = "grey70", linewidth = 0.1) +
+  geom_point(data = sites, aes(location_long, location_lat),
+             colour = "red", size = 3) +
+  geom_text(data = sites, aes(location_long, location_lat, label = site_id),
+            nudge_y = 7, size = 3.5) +
+  coord_quickmap() +
+  labs(x = "Longitude (°)", y = "Latitude (°)") +
+  theme_minimal()
+```
+
+```{r}
+all_hh |>
+  distinct(Site = site, `u* threshold` = "USTAR") |>
+  knitr::kable()
+```
+
+## Data Coverage
+
+```{r}
+coverage <- all_hh |>
+  mutate(year = as.integer(format(time, "%Y"))) |>
+  summarise(
+    measured = mean(NEE_VUT_REF_QC == 0, na.rm = TRUE),
+    .by = c(site, year))
+
+ggplot(coverage, aes(year, site, fill = measured)) +
+  geom_tile(colour = "white") +
+  scale_fill_viridis_c(name = "Measured NEE", labels = scales::percent,
+                       limits = c(0, 1)) +
+  labs(x = "Year", y = "Site") +
+  theme_minimal()
+```
+
+## Summary Statistics
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+vars <- c(TA_F     = "TA_F (°C)",
+          SW_IN_F  = "SW_IN_F (W m⁻²)",
+          VPD_F    = "VPD_F (hPa)",
+          P_F      = "P_F (mm)",
+          NEE      = "NEE (µmol CO₂ m⁻² s⁻¹)",
+          GPP      = "GPP (µmol CO₂ m⁻² s⁻¹)",
+          RECO     = "RECO (µmol CO₂ m⁻² s⁻¹)",
+          H_F_MDS  = "H (W m⁻²)",
+          LE_F_MDS = "LE (W m⁻²)")
+
+# Statistiken für alle Variablen und Türme
+stats <- all_hh |>
+  select(site, all_of(names(vars))) |>
+  pivot_longer(-site, names_to = "var") |>
+  summarise(Mean        = mean(value, na.rm = TRUE),
+            Min         = min(value, na.rm = TRUE),
+            Max         = max(value, na.rm = TRUE),
+            `% missing` = 100 * mean(is.na(value)),
+            .by = c(site, var))
+
+# Niederschlag: mittlere Jahressumme statt Mittelwert
+p_annual <- all_hh |>
+  mutate(year = format(time, "%Y")) |>
+  summarise(p_sum = sum(P_F, na.rm = TRUE), .by = c(site, year)) |>
+  summarise(p_annual = mean(p_sum), .by = site)
+
+stats <- stats |>
+  left_join(p_annual, by = "site") |>
+  mutate(Mean = if_else(var == "P_F", p_annual, Mean)) |>
+  select(-p_annual)
+
+# Eine Tabelle pro Turm
+for (s in my_sites) {
+  cat("\n\n### ", s, "\n\n", sep = "")
+  tab <- stats |>
+    filter(site == s) |>
+    select(-site) |>
+    mutate(var = vars[var]) |>
+    pivot_longer(c(Mean, Min, Max, `% missing`), names_to = "Statistic") |>
+    pivot_wider(names_from = var, values_from = value)
+  cat(knitr::kable(tab, digits = 1), sep = "\n")
+}
+```
+
+```{r}
+# Mean annual precipitation sum
+
+precip_summary <- all_hh |>
+  mutate(
+    year = as.integer(format(time, "%Y"))
+  ) |>
+  group_by(site, year) |>
+  summarise(
+    annual_precip_mm = sum(P_F, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  group_by(site) |>
+  summarise(
+    `P_F Mean annual sum (mm)` = mean(annual_precip_mm, na.rm = TRUE),
+    `P_F Min annual sum (mm)`  = min(annual_precip_mm, na.rm = TRUE),
+    `P_F Max annual sum (mm)`  = max(annual_precip_mm, na.rm = TRUE),
+    `P_F Missing (%)` = 100 * mean(is.na(all_hh$P_F[all_hh$site == first(site)]))
+  )
+
+precip_summary
+```
+
+## Time Series
+
+Half-hourly carbon fluxes were aggregated to daily means for each site and converted from µmol CO₂ m⁻² s⁻¹ to g C m⁻² d⁻¹ using a conversion factor of 1.0378.
+
+### Daily aggregation
+
+```{r}
+daily <- all_hh |>
+  mutate(date = as.Date(time)) |>
+  summarise(across(c(NEE, GPP, RECO), ~ mean(.x) * 1.0378),
+            .by = c(site, date))
+```
+
+```{r}
+daily |>
+  pivot_longer(c(NEE, GPP, RECO), names_to = "flux") |>
+  ggplot(aes(date, value, colour = flux)) +
+  geom_line(linewidth = 0.2, alpha = 0.8) +
+  facet_wrap(~ site, ncol = 1, scales = "free_x") +
+  scale_colour_manual(values = c(GPP = "darkgreen", RECO = "darkorange", NEE = "black")) +
+  labs(x = "Date", y = "Daily flux (g C m⁻² d⁻¹)", colour = NULL) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+
+### Validation against FLUXMET_DD
+
+To verify the aggregation procedure, daily values derived from the half-hourly records were compared with the corresponding daily product for one site (CN-Du2).
+
+```{r}
+z       <- list.files("data/raw", pattern = "CN-Du2.*\\.zip$", full.names = TRUE)
+dd_name <- grep("FLUXMET_DD", unzip(z, list = TRUE)$Name, value = TRUE)
+
+dd <- read_csv(unz(z, dd_name), na = "-9999",
+               col_select = c(TIMESTAMP, NEE_VUT_REF),
+               col_types = cols(TIMESTAMP = "c", .default = "d")) |>
+  mutate(date = as.Date(TIMESTAMP, format = "%Y%m%d"))
+
+cmp <- daily |>
+  filter(site == "CN-Du2") |>
+  inner_join(dd, by = "date")
+
+ggplot(cmp, aes(NEE_VUT_REF, NEE)) +
+  geom_point(size = 0.4, alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  labs(x = "NEE from FLUXMET_DD (g C m⁻² d⁻¹)",
+       y = "Own daily NEE (g C m⁻² d⁻¹)") +
+  coord_equal() +
+  theme_minimal()
+```
+
+## Diurnal cycles
+
+```{r}
+season_nh <- c("Winter", "Winter", "Spring", "Spring", "Spring", "Summer",
+               "Summer", "Summer", "Autumn", "Autumn", "Autumn", "Winter")
+
+diurnal <- all_hh |>
+  left_join(sites |> select(site = site_id, lat = location_lat), by = "site") |>
+  mutate(month  = as.integer(format(time, "%m")),
+         # Südhalbkugel: Monate um 6 verschieben (Januar -> Juli usw.)
+         month_adj = if_else(lat < 0, (month + 5) %% 12 + 1, month),
+         season = factor(season_nh[month_adj],
+                         levels = c("Spring", "Summer", "Autumn", "Winter")),
+         hour   = as.numeric(format(time, "%H")) + as.numeric(format(time, "%M")) / 60) |>
+  summarise(`NEE (µmol CO₂ m⁻² s⁻¹)` = mean(NEE, na.rm = TRUE),
+            `LE (W m⁻²)`             = mean(LE_F_MDS, na.rm = TRUE),
+            .by = c(site, season, hour))
+
+diurnal |>
+  pivot_longer(-c(site, season, hour), names_to = "variable") |>
+  ggplot(aes(hour, value, colour = site)) +
+  geom_line(linewidth = 0.7) +
+  facet_grid(variable ~ season, scales = "free_y", switch = "y") +
+  scale_x_continuous(breaks = seq(0, 24, 6)) +
+  labs(x = "Hour of day (local standard time)", y = NULL, colour = "Site") +
+  theme_minimal(base_size=13) +
+  theme(strip.placement = "outside", legend.position = "top")
+```
+
+## My Reading
+
+```{r}
+eb <- all_hh |>
+  filter(site == "CN-Du2", H_F_MDS_QC == 0, LE_F_MDS_QC == 0) |>
+  mutate(available = NETRAD - G_F_MDS,
+         turbulent = H_F_MDS + LE_F_MDS) |>
+  filter(!is.na(available), !is.na(turbulent))
+
+fit   <- lm(turbulent ~ available, data = eb)
+slope <- coef(fit)[["available"]]
+
+ggplot(eb, aes(available, turbulent)) +
+  geom_point(size = 0.3, alpha = 0.1) +
+  geom_abline(slope = 1, intercept = 0, colour = "red") +
+  geom_smooth(method = "lm", colour = "blue", se = FALSE) +
+  annotate("text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1.5,
+           label = paste0("slope = ", round(slope, 2), " (n = ", nrow(eb), ")")) +
+  labs(x = "NETRAD − G (W m⁻²)", y = "H + LE (W m⁻²)") +
+  coord_equal() +
+  theme_minimal(base_size = 13)
+```
+
+
+## Data and Citation
+
+Data citations for my towers (from the FLUXNET Shuttle snapshot):
+
+AU-Wrr: Wardlaw, T., Phillips, A. (2026): Warra FLUXNET Release 2026_r1. Version 2026_r1. Terrestrial Ecosystem Research Network (TERN). (Dataset).
+
+US-SP1: Rosvel Bracho, Timothy A. Martin (2026), AmeriFlux FLUXNET-1F US-SP1 Slashpine-Austin Cary- 65yrs nat regen, Ver. v1.3_r1 (2000-2020), AmeriFlux AMP, (Dataset). https://doi.org/10.17190/AMF/2469470
+
+CD-Ygb: Boeckx, P., Bauters, M., Verbeeck, H., Boon, G., Bulonza, E., Daelman, R., Ekili, D., Kimbesa, F., Lefevre, L., Mbifo, J., Sibret, T., Van Damme, F. (2026). Fluxnet Archive Product from Yangambi, 2020–2025, FLUXNET, https://hdl.handle.net/11676/4yxFg7HiX3wwcXY7t16U5Jec
+
+CN-Du2: Chen, S. (2026). Fluxnet Archive Product from Duolun_grassland (D01), 2011–2019, FLUXNET, https://hdl.handle.net/11676/4iVSvtAHibzF9fw90Vijm_Bi
+
+FI-Qvd: Heimsch, L., Kulmala, L., Lohila, A. (2026). Fluxnet Archive Product from Qvidja, 2018–2023, FLUXNET, https://hdl.handle.net/11676/UuvYrldK3v4VzDgfH6nC0ed7
+
+Also cite: Pastorello et al. (2020), Scientific Data 7, 225, https://doi.org/10.1038/s41597-020-0534-3
+
+Data products. FLUXNET data products (ONEFlux v1.3), downloaded with the FLUXNET Shuttle from AmeriFlux and the ICOS Carbon Portal. Licence: CC-BY-4.0.
+
+
+FLUXNET data products were produced and harmonized by eddy covariance regional networks and data processing centers, including AmeriFlux, ChinaFlux, European Fluxes Database, ICOS, JapanFlux, KoFlux, OzFlux, SAEON, and TERN. These products also include a modified version of ERA5 hourly data provided by the Copernicus Climate Change Service.

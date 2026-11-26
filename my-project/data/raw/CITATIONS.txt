@@ -1,0 +1,13 @@
+Data citations for my towers (from the FLUXNET Shuttle snapshot)
+
+AU-Wrr: Wardlaw, T., Phillips, A. (2026): Warra FLUXNET Release 2026_r1. Version 2026_r1. Terrestrial Ecosystem Research Network (TERN). (Dataset).
+
+US-SP1: Rosvel Bracho, Timothy A. Martin (2026), AmeriFlux FLUXNET-1F US-SP1 Slashpine-Austin Cary- 65yrs nat regen, Ver. v1.3_r1 (2000-2020), AmeriFlux AMP, (Dataset). https://doi.org/10.17190/AMF/2469470
+
+CD-Ygb: Boeckx, P., Bauters, M., Verbeeck, H., Boon, G., Bulonza, E., Daelman, R., Ekili, D., Kimbesa, F., Lefevre, L., Mbifo, J., Sibret, T., Van Damme, F. (2026). Fluxnet Archive Product from Yangambi, 2020–2025, FLUXNET, https://hdl.handle.net/11676/4yxFg7HiX3wwcXY7t16U5Jec
+
+CN-Du2: Chen, S. (2026). Fluxnet Archive Product from Duolun_grassland (D01), 2011–2019, FLUXNET, https://hdl.handle.net/11676/4iVSvtAHibzF9fw90Vijm_Bi
+
+FI-Qvd: Heimsch, L., Kulmala, L., Lohila, A. (2026). Fluxnet Archive Product from Qvidja, 2018–2023, FLUXNET, https://hdl.handle.net/11676/UuvYrldK3v4VzDgfH6nC0ed7
+
+Also cite: Pastorello et al. (2020), Scientific Data 7, 225, https://doi.org/10.1038/s41597-020-0534-3
