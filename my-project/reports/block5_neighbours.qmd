@@ -1,0 +1,369 @@
+---
+title: "Data Summary of Tower Environment"
+author: "Anastasia Kerber"
+date: 2026-11-26
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+execute:
+  warning: false
+---
+
+my GitHub: https://github.com/anastasiakerber/datascience_env_monit
+
+# Provenance Table
+
+```{r}
+library(readr)
+library(gt)
+
+provenance <- read_csv(
+  "../data/provenance.csv",
+  show_col_types = FALSE
+)
+
+provenance |>
+  gt()
+```
+
+# Site Portrait
+
+```{r}
+library(readr)
+library(dplyr)
+library(gt)
+
+site_static <- read_csv(
+  "../data/processed/site_static.csv",
+  show_col_types = FALSE
+)
+
+site_portrait <- site_static %>%
+  select(
+    site_id,
+    site_name,
+    country,
+    igbp,
+    BIO1,
+    BIO12,
+    soil0_30_phh2o,
+    soil0_30_soc,
+    SLA,
+    plant_height,
+    n_obs,
+    n_plant_species
+  )
+
+site_portrait <- site_portrait %>%
+  rename(
+    Site = site_id,
+    Site_Name = site_name,
+    Biome = igbp,
+    Mean_Temperature_C = BIO1,
+    Annual_Precipitation_mm = BIO12,
+    Soil_pH = soil0_30_phh2o,
+    Soil_Organic_Carbon = soil0_30_soc,
+    Specific_Leaf_Area = SLA,
+    Plant_Height_m = plant_height,
+    Species_Records = n_obs,
+    Plant_Species = n_plant_species
+  )
+
+site_portrait |>
+  gt() |>
+  fmt_number(
+    columns = c(
+      Mean_Temperature_C,
+      Soil_pH,
+      Soil_Organic_Carbon,
+      Specific_Leaf_Area,
+      Plant_Height_m
+    ),
+    decimals = 2
+  )
+```
+
+# Comparing the NDVI and EVI from modis against the GPP
+
+```{r}
+library(tidyverse)
+library(lubridate)
+
+# ------------------------------------------------------------
+# Read data
+# ------------------------------------------------------------
+
+site_daily <- read_csv(
+  "../data/processed/site_daily.csv",
+  na = c("NA", ""),
+  show_col_types = FALSE
+) %>%
+  mutate(
+    date = as.Date(date),
+    site_id = factor(
+      site_id,
+      levels = c(
+        "AU-Wrr",
+        "CD-Ygb",
+        "CN-Du2",
+        "FI-Qvd",
+        "US-SP1"
+      )
+    )
+  )
+
+
+# ------------------------------------------------------------
+# Check data availability
+# ------------------------------------------------------------
+
+data_availability <- site_daily %>%
+  group_by(site_id) %>%
+  summarise(
+    first_date = min(date, na.rm = TRUE),
+    last_date = max(date, na.rm = TRUE),
+    n_EVI = sum(!is.na(evi)),
+    n_GPP = sum(!is.na(GPP_NT_VUT_REF)),
+    .groups = "drop"
+  )
+
+print(data_availability)
+
+
+library(tidyverse)
+
+# ------------------------------------------------------------
+# Standardize variables within each site
+# ------------------------------------------------------------
+
+standardize <- function(x) {
+
+  if(sum(!is.na(x)) < 2) {
+    return(rep(NA_real_, length(x)))
+  }
+
+  as.numeric(scale(x))
+}
+
+plot_data <- site_daily %>%
+  group_by(site_id) %>%
+  mutate(
+    NDVI = standardize(ndvi),
+    EVI  = standardize(evi),
+    GPP  = standardize(GPP_NT_VUT_REF)
+  ) %>%
+  ungroup() %>%
+  select(
+    site_id,
+    date,
+    NDVI,
+    EVI,
+    GPP
+  ) %>%
+  pivot_longer(
+    cols = c(NDVI, EVI, GPP),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+# ------------------------------------------------------------
+# Plot
+# ------------------------------------------------------------
+
+ggplot(
+  plot_data,
+  aes(
+    x = date,
+    y = value,
+    color = variable
+  )
+) +
+  geom_line(
+    linewidth = 0.7,
+    na.rm = TRUE
+  ) +
+  facet_wrap(
+    ~site_id,
+    ncol = 1,
+    scales = "free_x"
+  ) +
+  scale_color_manual(
+    values = c(
+      NDVI = "#f4fc09",  # yellow
+      EVI  = "#f31448",  # red
+      GPP  = "#0072B2"   # blue
+    )
+  ) +
+  labs(
+    title = "Comparison of NDVI, EVI and Tower GPP",
+    subtitle = "Variables standardized separately within each site",
+    x = NULL,
+    y = "Standardized value (z-score)",
+    color = NULL
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+```
+
+
+GPP observations were unavailable for CD-Ygb in the provided dataset; therefore only NDVI and EVI are shown for this site.
+
+## Correlation between NDVI,EVI and the GPP-value
+```{r}
+safe_cor <- function(x, y) {
+
+  valid <- complete.cases(x, y)
+
+  if(sum(valid) < 2) {
+    return(NA_real_)
+  }
+
+  cor(x[valid], y[valid])
+}
+
+site_daily %>%
+  group_by(site_id) %>%
+  summarise(
+    cor_ndvi_gpp = safe_cor(
+      ndvi,
+      GPP_NT_VUT_REF
+    ),
+    cor_evi_gpp = safe_cor(
+      evi,
+      GPP_NT_VUT_REF
+    ),
+    n_pairs_ndvi = sum(
+      complete.cases(ndvi, GPP_NT_VUT_REF)
+    ),
+    n_pairs_evi = sum(
+      complete.cases(evi, GPP_NT_VUT_REF)
+    )
+  )
+```
+The n_pairs_* columns show how many observations each correlation is based on.
+
+# Question 6: Tree Mortality
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+annual_gpp <- site_daily %>%
+  filter(site_id == "FI-Qvd") %>%
+  mutate(year = year(date)) %>%
+  group_by(site_id, year) %>%
+  summarise(
+    annual_gpp = mean(GPP_NT_VUT_REF, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+deadtrees <- read_csv(
+  "../data/external/deadtrees/deadtrees_my_sites.csv",
+  na = c("NA", ""),
+  show_col_types = FALSE
+)
+
+mortality_data <- deadtrees %>%
+  inner_join(
+    annual_gpp,
+    by = c("site_id", "year")
+  )
+
+mortality_data |>
+  gt()
+
+nrow(mortality_data)
+
+library(ggplot2)
+
+ggplot(
+  mortality_data,
+  aes(
+    x = annual_gpp,
+    y = deadwood_pct
+  )
+) +
+  geom_point(size = 3) +
+  geom_smooth(
+    method = "lm",
+    se = TRUE,
+    color = "steelblue"
+  ) +
+  labs(
+    x = "Mean annual GPP",
+    y = "Standing deadwood (%)",
+    title = "Relationship between standing deadwood and annual GPP",
+subtitle = paste("FI-Qvd (Finland), n =", nrow(mortality_data), "site-years")
+  ) +
+  theme_bw()
+```
+
+Standing deadwood percentage was compared with mean annual GPP for the European forest site FI-Qvd. The analysis included n = 6 site-year observations. Standing deadwood ranged from approximately 4.6% to 7.0%, while mean annual GPP ranged from about 2.5 to 6.3. The fitted regression line suggests a weak negative relationship, with deadwood percentage tending to decrease slightly as annual GPP increases. However, the confidence interval around the regression line is wide, indicating substantial uncertainty in the estimated relationship. The scatterplot does not show a strong linear pattern, and individual years vary considerably around the trend. Given the small sample size, the observed relationship should be interpreted with caution.
+
+# Scale
+
+```{r}
+library(tibble)
+library(gt)
+
+scale_table <- tribble(
+  ~Dataset, ~Scale, ~Pixel_or_Footprint, ~Scale_Limitation_for_Results,
+
+  "FLUXNET",
+  "Tower footprint (typically hundreds of metres, varies with wind and canopy)",
+  "Footprint",
+  "GPP represents ecosystem processes only within the flux footprint.",
+
+  "MODIS MOD13Q1",
+  "250 m pixel",
+  "Pixel",
+  "NDVI and EVI average vegetation conditions over a larger area than the tower footprint. Correlations with GPP may be weakened when the MODIS pixel includes vegetation not contributing to tower fluxes.",
+
+  "ERA5-Land",
+  "~9 km grid",
+  "Pixel",
+  "Climate variables represent regional conditions and may not capture local microclimate at the tower.",
+
+  "WorldClim",
+  "~1 km grid",
+  "Pixel",
+  "Long-term averages characterize regional climate but do not represent yearly or local variability.",
+
+  "SoilGrids",
+  "250 m grid",
+  "Pixel",
+  "Soil properties are modelled averages and may not reflect soil heterogeneity within the tower footprint.",
+
+  "Pl@ntTraits",
+  "Species-level database",
+  "Not spatial",
+  "Trait values are species averages and may differ from local populations occurring at the site.",
+
+  "iNaturalist",
+  "Point observations",
+  "Point",
+  "Species records depend on observation effort and may not represent the full site community.",
+
+  "DeadTrees",
+  "Forest stand / landscape scale",
+  "Area-based",
+  "Deadwood estimates may not perfectly overlap with the area contributing to measured GPP.",
+
+  "DHEED",
+  "Event-based dataset",
+  "Variable",
+  "Recorded disturbances may occur near a site without affecting the exact tower footprint."
+)
+
+scale_table |>
+  gt()
+```
